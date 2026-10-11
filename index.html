@@ -186,23 +186,33 @@ function pdfFilename(){
   return (client?client+'_':'')+'Quotation'+(qno?'_'+qno:'')+'.pdf';
 }
 function pdfWorker(){
-  return html2pdf().set({
-    margin:[10,10,14,10],
+  const paper=$('quotePaper').cloneNode(true),note=$('notes').value;
+  paper.style.cssText='background:#fff;min-height:0;padding-bottom:0';
+  paper.querySelectorAll('.remove,.total-toggle').forEach(e=>e.remove());
+  paper.querySelectorAll('input').forEach(i=>i.removeAttribute('placeholder'));
+  paper.querySelectorAll('textarea').forEach(t=>{if(!note.trim())return t.remove();const d=document.createElement('div');d.style.cssText='white-space:pre-wrap;margin:14px 0;font:inherit';d.textContent=note;t.replaceWith(d)});
+  const SCALE=3,M=10,words=[];
+  const w=html2pdf().set({
+    margin:[M,M,14,M],
     filename:pdfFilename(),
     image:{type:'jpeg',quality:0.96},
-    /* scrollX/scrollY must be 0: html2canvas otherwise shifts the capture by the page scroll, giving a blank or pushed-down PDF */
-    html2canvas:{scale:3,useCORS:true,backgroundColor:'#ffffff',scrollX:0,scrollY:0,onclone(doc){
-      doc.querySelectorAll('.quote-paper .remove,.quote-paper .total-toggle').forEach(e=>e.remove());
-      doc.querySelectorAll('.quote-paper').forEach(p=>p.style.background='#fff');
-      doc.querySelectorAll('.quote-paper input').forEach(i=>i.removeAttribute('placeholder'));
-      doc.querySelectorAll('.quote-paper textarea').forEach(t=>{
-        if(!t.value.trim())return t.remove();
-        const d=doc.createElement('div');d.style.cssText='white-space:pre-wrap;margin:14px 0;font:inherit';d.textContent=t.value;t.replaceWith(d);
-      });
-    }},
+    /* scrollX/scrollY 0 and windowWidth without the scrollbar: html2canvas otherwise shifts the capture by the page scroll / half a scrollbar */
+    html2canvas:{scale:SCALE,useCORS:true,backgroundColor:'#ffffff',scrollX:0,scrollY:0,windowWidth:document.documentElement.clientWidth},
     jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
     pagebreak:{mode:['css','legacy']}
-  }).from($('quotePaper'));
+  }).from(paper);
+  /* The page is rendered as an image, so record where every word sits and draw it again as invisible text: that makes the PDF selectable and copyable.
+     shortcut: the text layer uses the built-in Helvetica (Latin only), so non-Latin text copies wrongly; embed a Unicode font if that matters. */
+  return w.toContainer().then(()=>{
+    const el=w.prop.container.firstElementChild,o=el.getBoundingClientRect(),inner=w.prop.pageSize.inner,k=inner.width/o.width,pageH=Math.floor(o.width*SCALE*inner.ratio)/SCALE;
+    const put=(t,x,base,width,cs)=>{if(t.trim())words.push({t:cs.textTransform==='uppercase'?t.toUpperCase():t,page:Math.floor(base/pageH)+1,x:M+x*k,y:M+(base%pageH)*k,w:width*k,size:parseFloat(cs.fontSize)*k*72/25.4})};
+    const tw=document.createTreeWalker(el,NodeFilter.SHOW_TEXT),range=document.createRange();
+    for(let n;n=tw.nextNode();){const cs=getComputedStyle(n.parentElement);for(const m of n.data.matchAll(/\S+/g)){range.setStart(n,m.index);range.setEnd(n,m.index+m[0].length);const r=range.getBoundingClientRect();if(r.width)put(m[0],r.left-o.left,r.top-o.top+r.height*.78,r.width,cs)}}
+    el.querySelectorAll('input').forEach(i=>{const r=i.getBoundingClientRect(),cs=getComputedStyle(i);if(r.width)put(i.value,r.left-o.left+parseFloat(cs.paddingLeft),r.top-o.top+r.height/2+parseFloat(cs.fontSize)*.35,0,cs)});
+  }).toPdf().then(()=>{
+    const pdf=w.prop.pdf,pages=pdf.internal.getNumberOfPages();
+    words.forEach(d=>{if(d.page>pages)return;pdf.setPage(d.page);pdf.setFontSize(d.size);const tw=pdf.getTextWidth(d.t);if(d.w&&tw)pdf.setFontSize(d.size*d.w/tw);pdf.text(d.t,d.x,d.y,{renderingMode:'invisible'})});
+  });
 }
 function downloadPdf(){
   if(!selected.length)return toast('Add at least one treatment');
