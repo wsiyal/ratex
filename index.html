@@ -147,7 +147,7 @@ function updateRateStatus(){
 }
 const CHINA_TZ='Asia/Shanghai';
 function shanghaiDateStamp(d){return new Intl.DateTimeFormat('en-CA',{timeZone:CHINA_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(d).replaceAll('-','')}
-function shanghaiDisplay(d){const date=d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:CHINA_TZ});const time=d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:CHINA_TZ});return date+', '+time+' (China Standard Time)'}
+function shanghaiDisplay(d){const date=d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:CHINA_TZ});const time=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:CHINA_TZ});return date+', '+time+' (China Standard Time)'}
 function init(){Object.entries(currencies).forEach(([k,v])=>$('currency').add(new Option(v.name,k)));$('currency').value='United States';setRate();renderCatalog();buildTreatmentSelect();renderQuote();const d=new Date();$('quoteDate').textContent=shanghaiDisplay(d);$('quoteNo').textContent='Quote # '+shanghaiDateStamp(d)+'-'+String(Math.floor(Math.random()*900)+100);fetchLiveRates(false);setInterval(()=>fetchLiveRates(false),30*60*1000)}
 function setRate(){const selectedCurrency=$('currency').value,isOther=selectedCurrency==='OTHER';$('otherCountryWrap').hidden=!isOther;$('otherCodeWrap').hidden=!isOther;$('rate').value=currencies[selectedCurrency].rate;updateCurrencyDisplay();updateRateStatus()}
 function updateCurrencyDisplay(){const c=currencyCode();$('rateCode').textContent=c;$('foreignHead').textContent=c;$('foreignLabel').textContent='Total ('+countryName()+' — '+c+')';renderQuote()}
