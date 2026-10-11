@@ -182,56 +182,36 @@ function pdfFilename(){
   const qno=($('quoteNo').textContent||'').replace(/[^\d-]/g,'');
   return (client?client+'_':'')+'Quotation'+(qno?'_'+qno:'')+'.pdf';
 }
-function buildPdfSource(){
-  /* Clone quotePaper into an off-screen full-width container so html2canvas captures it correctly */
-  const src=$('quotePaper');
-  const wrap=document.createElement('div');
-  wrap.style.cssText='position:fixed;left:0;top:0;width:740px;background:#fff;z-index:-9999;opacity:0;pointer-events:none';
-  const clone=src.cloneNode(true);
-  clone.removeAttribute('id');
-  clone.style.cssText='position:static;width:740px;max-width:740px;min-height:0;margin:0;padding:24px;background:#fff';
-  /* Copy live input values into the clone */
-  src.querySelectorAll('input,textarea').forEach(el=>{
-    const c=clone.querySelector('#'+CSS.escape(el.id));
-    if(!c)return;
-    if(c.tagName==='TEXTAREA')c.textContent=el.value;
-    else c.setAttribute('value',el.value);
-  });
-  clone.querySelectorAll('.remove').forEach(b=>b.remove());
-  clone.querySelectorAll('.total-toggle').forEach(t=>t.remove());
-  clone.querySelectorAll('textarea').forEach(note=>{if(!note.value&&!note.textContent.trim())note.remove();else{note.style.border='0';note.style.padding='0'}});
-  wrap.appendChild(clone);
-  document.body.appendChild(wrap);
-  return {el:clone,cleanup(){wrap.remove()}};
+function pdfWorker(){
+  return html2pdf().set({
+    margin:[10,10,14,10],
+    filename:pdfFilename(),
+    image:{type:'jpeg',quality:0.96},
+    /* scrollX/scrollY must be 0: html2canvas otherwise shifts the capture by the page scroll, giving a blank or pushed-down PDF */
+    html2canvas:{scale:3,useCORS:true,backgroundColor:'#ffffff',scrollX:0,scrollY:0,onclone(doc){
+      doc.querySelectorAll('.quote-paper .remove,.quote-paper .total-toggle').forEach(e=>e.remove());
+      doc.querySelectorAll('.quote-paper').forEach(p=>p.style.background='#fff');
+      doc.querySelectorAll('.quote-paper input').forEach(i=>i.removeAttribute('placeholder'));
+      doc.querySelectorAll('.quote-paper textarea').forEach(t=>{
+        if(!t.value.trim())return t.remove();
+        const d=doc.createElement('div');d.style.cssText='white-space:pre-wrap;margin:14px 0;font:inherit';d.textContent=t.value;t.replaceWith(d);
+      });
+    }},
+    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+    pagebreak:{mode:['css','legacy']}
+  }).from($('quotePaper'));
 }
 function downloadPdf(){
   if(!selected.length)return toast('Add at least one treatment');
   if(typeof html2pdf==='undefined'){toast('PDF engine unavailable — printing instead');return window.print()}
   toast('Generating PDF…');
-  const {el,cleanup}=buildPdfSource();
-  html2pdf().set({
-    margin:[10,10,14,10],
-    filename:pdfFilename(),
-    image:{type:'jpeg',quality:0.96},
-    html2canvas:{scale:3,useCORS:true,backgroundColor:'#ffffff',width:740},
-    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-    pagebreak:{mode:['css','legacy']}
-  }).from(el).save().then(cleanup).catch(()=>{cleanup();toast('PDF generation failed — printing instead');window.print()});
+  pdfWorker().save().catch(()=>{toast('PDF generation failed — printing instead');window.print()});
 }
 function printQuote(){
   if(!selected.length)return toast('Add at least one treatment');
   if(typeof html2pdf==='undefined'){toast('PDF engine unavailable — printing instead');return window.print()}
   toast('Preparing print…');
-  const {el,cleanup}=buildPdfSource();
-  html2pdf().set({
-    margin:[10,10,14,10],
-    filename:pdfFilename(),
-    image:{type:'jpeg',quality:0.96},
-    html2canvas:{scale:3,useCORS:true,backgroundColor:'#ffffff',width:740},
-    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-    pagebreak:{mode:['css','legacy']}
-  }).from(el).toPdf().output('bloburl').then(url=>{
-    cleanup();
+  pdfWorker().toPdf().output('bloburl').then(url=>{
     const iframe=document.createElement('iframe');
     iframe.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
     iframe.src=url;
@@ -243,7 +223,7 @@ function printQuote(){
         setTimeout(()=>{iframe.remove();URL.revokeObjectURL(url)},60000);
       },350);
     };
-  }).catch(()=>{cleanup();toast('Could not prepare the print view — printing instead');window.print()});
+  }).catch(()=>{toast('Could not prepare the print view — printing instead');window.print()});
 }
 $('clearBtn').onclick=()=>{selected=[];renderQuote();toast('Quotation cleared')};$('copyBtn').onclick=copySummary;$('printBtn').onclick=printQuote;$('downloadBtn').onclick=downloadPdf;$('refreshRates').onclick=()=>{manualOverride.delete($('currency').value);fetchLiveRates(true)};init();
 if(document.modelContext?.registerTool){document.modelContext.registerTool({name:'add_treatment_to_quote',title:'Add treatment to quotation',description:'Add a treatment from the price list to the visible quotation.',inputSchema:{type:'object',properties:{treatment:{type:'string'},quantity:{type:'integer',minimum:1}},required:['treatment','quantity'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},execute({treatment,quantity}){for(let ci=0;ci<categories.length;ci++){const ii=categories[ci].items.findIndex(x=>x[0].toLowerCase()===String(treatment).toLowerCase());if(ii>=0){addTreatment(ci,ii,{qty:quantity});return{added:categories[ci].items[ii][0],quantity}}}throw new Error('Treatment not found')}}).catch?.(()=>{})}
