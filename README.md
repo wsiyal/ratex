@@ -10,7 +10,7 @@ A single-page quotation tool for international dental treatment packages, with *
 - Converts the RMB total to the client's currency automatically
 - Exchange rates are fetched from live market-rate APIs on load and refreshed every 30 minutes, with a status indicator showing whether the rate is **live**, **cached** (last known rate, used offline), or a **preset estimate** (fallback if no rate source is reachable)
 - The rate field stays editable — override it manually any time and the auto-refresh won't touch it again for that currency until you hit "Refresh"
-- Supports 16 preset currencies plus a free-text "Other country" option
+- Lists every country (≈190) with its currency and fetches the live RMB rate for each; free-text "Other country" remains for anything missing. Includes a Custom Price Range option (min–max RMB, auto-converted)
 - Copy a plain-text summary, or use Print / Save PDF to produce a client-ready quotation
 - Works fully offline (falls back to the last cached or preset rate) — only the live-rate refresh needs a connection
 
