@@ -191,7 +191,10 @@ function pdfWorker(){
         if(clone.tagName==='TEXTAREA')clone.textContent=live.value;
         else clone.setAttribute('value',live.value);
       });
-      doc.querySelectorAll('#quotePaper').forEach(paper=>{paper.style.position='static';paper.style.width=PDF_PAGE_PX+'px';paper.style.maxWidth=PDF_PAGE_PX+'px';paper.style.minHeight='0';paper.style.margin='0'});
+      doc.querySelectorAll('.workspace').forEach(el=>{el.style.display='block'});
+      doc.querySelectorAll('.builder,.topbar,.actions').forEach(el=>{el.style.display='none'});
+      doc.querySelectorAll('.quote').forEach(el=>{el.style.position='static';el.style.width=PDF_PAGE_PX+'px';el.style.maxWidth=PDF_PAGE_PX+'px';el.style.border='none';el.style.boxShadow='none'});
+      doc.querySelectorAll('#quotePaper').forEach(paper=>{paper.style.position='static';paper.style.width=PDF_PAGE_PX+'px';paper.style.maxWidth=PDF_PAGE_PX+'px';paper.style.minHeight='0';paper.style.margin='0';paper.style.padding='24px'});
       doc.querySelectorAll('.remove').forEach(b=>b.remove());
       doc.querySelectorAll('.total-toggle').forEach(t=>t.remove());
       doc.querySelectorAll('#notes').forEach(note=>{if(!note.value.trim())note.remove();else{note.style.border='0';note.style.padding='0'}});
