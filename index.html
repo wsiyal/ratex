@@ -177,43 +177,61 @@ function toast(msg){$('toast').textContent=msg;$('toast').classList.add('show');
 function copySummary(){if(!selected.length)return toast('Add at least one treatment');const c=currencyCode(),rate=+$('rate').value,total=selected.reduce((s,x)=>s+(x.isRange?0:x.price*x.qty),0),lines=['HUANGSHAN INTERNATIONAL DENTAL HOSPITAL','ESTIMATED TREATMENT QUOTATION','Client: '+($('clientName').value||'—'),'Consultant: '+($('consultantName').value||'—'),'Country: '+countryName(),'',...selected.map(x=>x.isRange?rangeText(x,rate,c):`${x.name} × ${x.qty}: ${money(x.price*x.qty)} / ${money(x.price*x.qty*rate,c)}`),'',...($('showTotal').checked?['Total: '+money(total)+' / '+money(total*rate,c)]:[]),'Exchange rate: 1 RMB = '+rate+' '+c,$('notes').value?'Notes: '+$('notes').value:''];navigator.clipboard.writeText(lines.join('\n')).then(()=>toast('Quotation summary copied')).catch(()=>toast('Could not copy automatically'))}
 $('currency').onchange=setRate;$('rate').oninput=()=>{const c=$('currency').value;if(c!=='OTHER'){manualOverride.add(c);currencies[c].rate=+$('rate').value||0}renderQuote()};$('otherCountry').oninput=updateCurrencyDisplay;$('otherCode').oninput=updateCurrencyDisplay;$('showTotal').onchange=renderQuote;
 $('search').onchange=()=>{const v=$('search').value;if(!v){$('treatmentPreview').hidden=true;return}const [ci,ii]=v.split('-').map(Number);showTreatmentPreview(ci,ii)};
-const PDF_PAGE_PX=740; /* fixed capture width so the quotation renders as a consistent, professional page regardless of the live sidebar's on-screen width */
-function pdfWorker(){
-  const filename=($('quoteNo').textContent||'Quotation').replace(/[^\w-]+/g,'_')+'.pdf';
-  return html2pdf().set({
-    margin:[10,10,14,10],
-    filename,
-    image:{type:'jpeg',quality:0.96},
-    html2canvas:{scale:3,useCORS:true,backgroundColor:'#ffffff',windowWidth:PDF_PAGE_PX,onclone(doc){
-      doc.querySelectorAll('#quotePaper input, #quotePaper textarea').forEach(clone=>{
-        const live=document.getElementById(clone.id);
-        if(!live)return;
-        if(clone.tagName==='TEXTAREA')clone.textContent=live.value;
-        else clone.setAttribute('value',live.value);
-      });
-      doc.querySelectorAll('.workspace').forEach(el=>{el.style.display='block'});
-      doc.querySelectorAll('.builder,.topbar,.actions').forEach(el=>{el.style.display='none'});
-      doc.querySelectorAll('.quote').forEach(el=>{el.style.position='static';el.style.width=PDF_PAGE_PX+'px';el.style.maxWidth=PDF_PAGE_PX+'px';el.style.border='none';el.style.boxShadow='none'});
-      doc.querySelectorAll('#quotePaper').forEach(paper=>{paper.style.position='static';paper.style.width=PDF_PAGE_PX+'px';paper.style.maxWidth=PDF_PAGE_PX+'px';paper.style.minHeight='0';paper.style.margin='0';paper.style.padding='24px'});
-      doc.querySelectorAll('.remove').forEach(b=>b.remove());
-      doc.querySelectorAll('.total-toggle').forEach(t=>t.remove());
-      doc.querySelectorAll('#notes').forEach(note=>{if(!note.value.trim())note.remove();else{note.style.border='0';note.style.padding='0'}});
-    }},
-    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
-    pagebreak:{mode:['css','legacy']}
-  }).from($('quotePaper'));
+function pdfFilename(){
+  const client=($('clientName').value||'').trim().replace(/[^\w\s-]/g,'').replace(/\s+/g,'_');
+  const qno=($('quoteNo').textContent||'').replace(/[^\d-]/g,'');
+  return (client?client+'_':'')+'Quotation'+(qno?'_'+qno:'')+'.pdf';
+}
+function buildPdfSource(){
+  /* Clone quotePaper into an off-screen full-width container so html2canvas captures it correctly */
+  const src=$('quotePaper');
+  const wrap=document.createElement('div');
+  wrap.style.cssText='position:fixed;left:0;top:0;width:740px;background:#fff;z-index:-9999;opacity:0;pointer-events:none';
+  const clone=src.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.style.cssText='position:static;width:740px;max-width:740px;min-height:0;margin:0;padding:24px;background:#fff';
+  /* Copy live input values into the clone */
+  src.querySelectorAll('input,textarea').forEach(el=>{
+    const c=clone.querySelector('#'+CSS.escape(el.id));
+    if(!c)return;
+    if(c.tagName==='TEXTAREA')c.textContent=el.value;
+    else c.setAttribute('value',el.value);
+  });
+  clone.querySelectorAll('.remove').forEach(b=>b.remove());
+  clone.querySelectorAll('.total-toggle').forEach(t=>t.remove());
+  clone.querySelectorAll('textarea').forEach(note=>{if(!note.value&&!note.textContent.trim())note.remove();else{note.style.border='0';note.style.padding='0'}});
+  wrap.appendChild(clone);
+  document.body.appendChild(wrap);
+  return {el:clone,cleanup(){wrap.remove()}};
 }
 function downloadPdf(){
   if(!selected.length)return toast('Add at least one treatment');
   if(typeof html2pdf==='undefined'){toast('PDF engine unavailable — printing instead');return window.print()}
   toast('Generating PDF…');
-  pdfWorker().save().catch(()=>{toast('PDF generation failed — printing instead');window.print()});
+  const {el,cleanup}=buildPdfSource();
+  html2pdf().set({
+    margin:[10,10,14,10],
+    filename:pdfFilename(),
+    image:{type:'jpeg',quality:0.96},
+    html2canvas:{scale:3,useCORS:true,backgroundColor:'#ffffff',width:740},
+    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+    pagebreak:{mode:['css','legacy']}
+  }).from(el).save().then(cleanup).catch(()=>{cleanup();toast('PDF generation failed — printing instead');window.print()});
 }
 function printQuote(){
   if(!selected.length)return toast('Add at least one treatment');
   if(typeof html2pdf==='undefined'){toast('PDF engine unavailable — printing instead');return window.print()}
   toast('Preparing print…');
-  pdfWorker().toPdf().output('bloburl').then(url=>{
+  const {el,cleanup}=buildPdfSource();
+  html2pdf().set({
+    margin:[10,10,14,10],
+    filename:pdfFilename(),
+    image:{type:'jpeg',quality:0.96},
+    html2canvas:{scale:3,useCORS:true,backgroundColor:'#ffffff',width:740},
+    jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+    pagebreak:{mode:['css','legacy']}
+  }).from(el).toPdf().output('bloburl').then(url=>{
+    cleanup();
     const iframe=document.createElement('iframe');
     iframe.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
     iframe.src=url;
@@ -225,7 +243,7 @@ function printQuote(){
         setTimeout(()=>{iframe.remove();URL.revokeObjectURL(url)},60000);
       },350);
     };
-  }).catch(()=>{toast('Could not prepare the print view — printing instead');window.print()});
+  }).catch(()=>{cleanup();toast('Could not prepare the print view — printing instead');window.print()});
 }
 $('clearBtn').onclick=()=>{selected=[];renderQuote();toast('Quotation cleared')};$('copyBtn').onclick=copySummary;$('printBtn').onclick=printQuote;$('downloadBtn').onclick=downloadPdf;$('refreshRates').onclick=()=>{manualOverride.delete($('currency').value);fetchLiveRates(true)};init();
 if(document.modelContext?.registerTool){document.modelContext.registerTool({name:'add_treatment_to_quote',title:'Add treatment to quotation',description:'Add a treatment from the price list to the visible quotation.',inputSchema:{type:'object',properties:{treatment:{type:'string'},quantity:{type:'integer',minimum:1}},required:['treatment','quantity'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},execute({treatment,quantity}){for(let ci=0;ci<categories.length;ci++){const ii=categories[ci].items.findIndex(x=>x[0].toLowerCase()===String(treatment).toLowerCase());if(ii>=0){addTreatment(ci,ii,{qty:quantity});return{added:categories[ci].items[ii][0],quantity}}}throw new Error('Treatment not found')}}).catch?.(()=>{})}
